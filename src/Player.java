@@ -11,7 +11,7 @@ interface GameStrategy{
 
     default void processDraftTurn(GameState currentGame){
         Optional<Card> maxByValue = currentGame.myPlayer.cardsInHand.stream().max(Comparator.comparing(Card::getValue));
-        maxByValue.ifPresent(card -> System.out.println("PICK " + card.position));
+        maxByValue.ifPresent(card -> {System.out.println("PICK " + card.position); currentGame.draftedCards.add(card);});
     }
 
     void processBattleTurn(GameState currentGame);
@@ -21,6 +21,25 @@ interface GameStrategy{
 
 
 class DefaultStrategy implements GameStrategy{
+
+    @Override
+    public void processDraftTurn(GameState currentGame) {
+        List<Card> cardsToPickFrom = currentGame.myPlayer.cardsInHand;
+        ManaCurve manaCurve = new ManaCurve();
+        manaCurve.initialise(currentGame.draftedCards);
+        int currentMinScore = manaCurve.evalScore();
+        Card bestCard = cardsToPickFrom.get(0);
+        for(Card card : cardsToPickFrom){
+            int score = manaCurve.evalScoreWithCandidate(card);
+            if(score <= currentMinScore){
+                currentMinScore = score;
+                bestCard = card;
+            }
+        }
+        System.err.println(bestCard);
+        System.out.println("PICK " + bestCard.position);
+        currentGame.draftedCards.add(bestCard);
+    }
 
     boolean decideAttack(GameState currentGame){
         String action = "";
@@ -109,6 +128,7 @@ class DefaultStrategy implements GameStrategy{
 class GameState{
     PlayerState myPlayer = new PlayerState();
     PlayerState opponent = new PlayerState();
+    List<Card> draftedCards = new ArrayList<>();
     int turnNumber;
 }
 class PlayerState{
@@ -121,6 +141,32 @@ class PlayerState{
     List<Card> cardsInHand = new ArrayList<>();
     List<Card> cardsOnBoard = new ArrayList<>();
 
+}
+
+class ManaCurve{
+    private static final int MAX_MANA = 12;
+    private int[] curve = new int[MAX_MANA+1];
+    int evalScore(){
+        int lowCount = curve[0] + curve[1] + curve[2];
+        int medCount = curve[2] + curve[3] + curve[4];
+        int highCount = 0;
+        for (int i = 6; i<=MAX_MANA; i++)
+            highCount += curve[1];
+        return Math.abs(lowCount - 15) + Math.abs(medCount - 10) + Math.abs(highCount - 5);
+
+    }
+
+    int evalScoreWithCandidate(Card card){
+        curve[card.cost]++;
+        int score = evalScore();
+        curve[card.cost]++;
+        return score;
+    }
+
+    void initialise(List<Card> cards){
+        for (Card card : cards) curve[card.cost]++;
+        Arrays.stream(curve).forEach(System.err::println);
+    }
 }
 class Player {
 
